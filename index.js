@@ -21,7 +21,7 @@ app.use(
   })
 );
 
-const GHL_BASE_URL = "https://rest.gohighlevel.com/v1";
+const GHL_BASE_URL = "https://services.leadconnectorhq.com";
 
 function getGhlClient(ghlToken) {
   return axios.create({
