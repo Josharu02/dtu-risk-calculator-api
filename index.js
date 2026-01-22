@@ -35,14 +35,18 @@ function getGhlClient(ghlToken) {
   });
 }
 
-async function lookupContactByEmail(client, email) {
-  console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/lookup`);
-  const response = await client.get("/contacts/lookup", {
-    params: { email },
+async function lookupContactByEmail(client, email, locationId) {
+  console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/search`);
+  const response = await client.get("/contacts/search", {
+    params: { locationId, query: email },
   });
-  return response.data && response.data.contacts && response.data.contacts[0]
-    ? response.data.contacts[0]
-    : null;
+  const contacts = response.data && response.data.contacts ? response.data.contacts : [];
+  const normalizedEmail = String(email || "").toLowerCase();
+  const match =
+    contacts.find(
+      (contact) => String(contact && contact.email ? contact.email : "").toLowerCase() === normalizedEmail
+    ) || null;
+  return match;
 }
 
 async function createContact(client, payload) {
@@ -130,7 +134,7 @@ app.post("/email-plan", async (req, res) => {
     console.log("GHL_VERSION_PRESENT", Boolean(versionHeader));
     let existing;
     try {
-      existing = await lookupContactByEmail(client, email);
+      existing = await lookupContactByEmail(client, email, ghlLocationId);
     } catch (err) {
       console.log("GHL_ERROR_STATUS", err?.response?.status);
       console.log("GHL_ERROR_DATA", err?.response?.data);
