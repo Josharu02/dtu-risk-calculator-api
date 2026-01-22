@@ -37,16 +37,24 @@ function getGhlClient(ghlToken) {
 
 async function lookupContactByEmail(client, email, locationId) {
   console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/search`);
-  const response = await client.get("/contacts/search", {
-    params: { locationId, query: email },
+  const response = await client.post("/contacts/search", {
+    query: email,
+    limit: 20,
+    page: 1,
   });
-  const contacts = response.data && response.data.contacts ? response.data.contacts : [];
+  const contacts =
+    response.data && response.data.contacts && Array.isArray(response.data.contacts)
+      ? response.data.contacts
+      : [];
   const normalizedEmail = String(email || "").toLowerCase();
   const match =
     contacts.find(
       (contact) => String(contact && contact.email ? contact.email : "").toLowerCase() === normalizedEmail
     ) || null;
-  return match;
+  if (!match || !match.id) {
+    return null;
+  }
+  return { id: match.id };
 }
 
 async function createContact(client, payload) {
