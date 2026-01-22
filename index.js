@@ -71,10 +71,9 @@ async function updateContact(client, contactId, payload) {
   return response.data;
 }
 
-async function addTagToContact(client, contactId, tag, locationId) {
+async function addTagToContact(client, contactId, tag) {
   console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/${contactId}/tags`);
   const response = await client.post(`/contacts/${contactId}/tags`, {
-    locationId,
     tags: [tag],
   });
   return response.data;
@@ -208,7 +207,7 @@ app.post("/email-plan", async (req, res) => {
     }
 
     try {
-    await addTagToContact(client, contactId, "risk_calculator_plan", ghlLocationId);
+    await addTagToContact(client, contactId, "risk_calculator_plan");
     } catch (err) {
       console.log("GHL_ERROR_STATUS", err?.response?.status);
       console.log("GHL_ERROR_DATA", err?.response?.data);
