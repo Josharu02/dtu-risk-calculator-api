@@ -40,8 +40,8 @@ async function lookupContactByEmail(client, email, locationId) {
   const response = await client.post("/contacts/search", {
     locationId,
     query: email,
-    limit: 20,
     page: 1,
+    pageLimit: 20,
   });
   const contacts =
     response.data && response.data.contacts && Array.isArray(response.data.contacts)
