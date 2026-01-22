@@ -8,6 +8,11 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
+app.use((req, res, next) => {
+  console.log("INCOMING", req.method, req.path);
+  next();
+});
+
 app.use(express.json({ limit: "1mb" }));
 app.use(
   cors({
@@ -65,6 +70,7 @@ app.get("/health", (req, res) => {
 });
 
 app.post("/email-plan", async (req, res) => {
+  console.log("EMAIL_PLAN_HIT");
   try {
     const {
       full_name,
