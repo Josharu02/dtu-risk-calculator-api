@@ -71,6 +71,11 @@ app.get("/health", (req, res) => {
 
 app.post("/email-plan", async (req, res) => {
   console.log("EMAIL_PLAN_HIT");
+  console.log(
+    "HEADERS_AUTH_PRESENT",
+    Boolean(req.headers.authorization),
+    Boolean(req.headers["x-api-key"])
+  );
   try {
     const {
       full_name,
@@ -96,7 +101,14 @@ app.post("/email-plan", async (req, res) => {
     }
 
     const client = getGhlClient();
-    const existing = await lookupContactByEmail(client, email);
+    let existing;
+    try {
+      existing = await lookupContactByEmail(client, email);
+    } catch (err) {
+      console.log("GHL_ERROR_STATUS", err?.response?.status);
+      console.log("GHL_ERROR_DATA", err?.response?.data);
+      throw err;
+    }
 
     const customFields = [
       { key: "profit_target", value: profit_target },
@@ -124,24 +136,45 @@ app.post("/email-plan", async (req, res) => {
 
     let contactId;
     if (existing && existing.id) {
-      const updated = await updateContact(client, existing.id, contactPayload);
-      contactId = updated && updated.contact ? updated.contact.id : existing.id;
+      try {
+        const updated = await updateContact(client, existing.id, contactPayload);
+        contactId = updated && updated.contact ? updated.contact.id : existing.id;
+      } catch (err) {
+        console.log("GHL_ERROR_STATUS", err?.response?.status);
+        console.log("GHL_ERROR_DATA", err?.response?.data);
+        throw err;
+      }
     } else {
-      const created = await createContact(client, contactPayload);
-      contactId = created && created.contact ? created.contact.id : null;
+      try {
+        const created = await createContact(client, contactPayload);
+        contactId = created && created.contact ? created.contact.id : null;
+      } catch (err) {
+        console.log("GHL_ERROR_STATUS", err?.response?.status);
+        console.log("GHL_ERROR_DATA", err?.response?.data);
+        throw err;
+      }
     }
 
     if (!contactId) {
       return res.status(502).json({ ok: false, error: "Unable to resolve contact ID." });
     }
 
-    await addTagToContact(client, contactId, "risk_calculator_plan");
+    try {
+      await addTagToContact(client, contactId, "risk_calculator_plan");
+    } catch (err) {
+      console.log("GHL_ERROR_STATUS", err?.response?.status);
+      console.log("GHL_ERROR_DATA", err?.response?.data);
+      throw err;
+    }
 
     return res.json({ ok: true });
   } catch (err) {
     const status = err.response && err.response.status ? err.response.status : 500;
     const message =
       err.response && err.response.data ? err.response.data : { error: err.message };
+    if (status === 401) {
+      console.log("SERVER_401_REASON", "ghl_response");
+    }
     return res.status(status).json({ ok: false, error: message });
   }
 });
