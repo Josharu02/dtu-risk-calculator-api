@@ -168,12 +168,18 @@ app.post("/email-plan", async (req, res) => {
       { key: "daily_profit_target", value: daily_profit_target },
       { key: "max_daily_profit", value: max_daily_profit },
     ];
+    const sanitizedCustomFields = customFields.filter((field) => {
+      if (!field || field.key !== "consistency_enabled") {
+        return true;
+      }
+      return field.value === true;
+    });
 
     const contactPayload = {
       locationId: ghlLocationId,
       name: full_name,
       email,
-      customFields,
+      customFields: sanitizedCustomFields,
     };
 
     let contactId;
