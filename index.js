@@ -22,18 +22,14 @@ app.use(
 );
 
 const GHL_BASE_URL = "https://rest.gohighlevel.com/v1";
-const GHL_LOCATION_ID = "OiIKORhJ82flAVisHu3d";
 
-function getGhlClient() {
-  const apiKey = process.env.GHL_API_KEY;
-  if (!apiKey) {
-    throw new Error("GHL_API_KEY is not set.");
-  }
+function getGhlClient(ghlApiKey) {
   return axios.create({
     baseURL: GHL_BASE_URL,
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${ghlApiKey}`,
       "Content-Type": "application/json",
+      Version: "2021-07-28",
     },
     timeout: 15000,
   });
@@ -76,6 +72,15 @@ app.post("/email-plan", async (req, res) => {
     Boolean(req.headers.authorization),
     Boolean(req.headers["x-api-key"])
   );
+  const ghlApiKey = (process.env.GHL_API_KEY || "").trim();
+  const ghlLocationId = (process.env.GHL_LOCATION_ID || "").trim();
+  console.log("GHL_KEY_LENGTH", ghlApiKey.length);
+  if (!ghlApiKey) {
+    return res.status(500).json({ ok: false, error: "GHL_API_KEY is not set." });
+  }
+  if (!ghlLocationId) {
+    return res.status(500).json({ ok: false, error: "GHL_LOCATION_ID is not set." });
+  }
   try {
     const {
       full_name,
@@ -100,7 +105,7 @@ app.post("/email-plan", async (req, res) => {
       return res.status(400).json({ ok: false, error: "full_name and email are required." });
     }
 
-    const client = getGhlClient();
+    const client = getGhlClient(ghlApiKey);
     let existing;
     try {
       existing = await lookupContactByEmail(client, email);
@@ -128,7 +133,7 @@ app.post("/email-plan", async (req, res) => {
     ];
 
     const contactPayload = {
-      locationId: GHL_LOCATION_ID,
+      locationId: ghlLocationId,
       name: full_name,
       email,
       customFields,
