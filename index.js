@@ -66,7 +66,8 @@ async function createContact(client, payload) {
 
 async function updateContact(client, contactId, payload) {
   console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/${contactId}`);
-  const response = await client.put(`/contacts/${contactId}`, payload);
+  const { locationId, ...safePayload } = payload || {};
+  const response = await client.put(`/contacts/${contactId}`, safePayload);
   return response.data;
 }
 
