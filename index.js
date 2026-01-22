@@ -38,6 +38,7 @@ function getGhlClient(ghlToken) {
 async function lookupContactByEmail(client, email, locationId) {
   console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/search`);
   const response = await client.post("/contacts/search", {
+    locationId,
     query: email,
     limit: 20,
     page: 1,
@@ -69,9 +70,10 @@ async function updateContact(client, contactId, payload) {
   return response.data;
 }
 
-async function addTagToContact(client, contactId, tag) {
+async function addTagToContact(client, contactId, tag, locationId) {
   console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/${contactId}/tags`);
   const response = await client.post(`/contacts/${contactId}/tags`, {
+    locationId,
     tags: [tag],
   });
   return response.data;
@@ -96,7 +98,7 @@ app.post("/email-plan", async (req, res) => {
     return res.status(500).json({ ok: false, error: "GHL_API_KEY is not set." });
   }
   if (!ghlLocationId) {
-    return res.status(500).json({ ok: false, error: "GHL_LOCATION_ID is not set." });
+    return res.status(500).json({ ok: false, error: "Missing GHL_LOCATION_ID" });
   }
   try {
     const {
@@ -199,7 +201,7 @@ app.post("/email-plan", async (req, res) => {
     }
 
     try {
-      await addTagToContact(client, contactId, "risk_calculator_plan");
+    await addTagToContact(client, contactId, "risk_calculator_plan", ghlLocationId);
     } catch (err) {
       console.log("GHL_ERROR_STATUS", err?.response?.status);
       console.log("GHL_ERROR_DATA", err?.response?.data);
