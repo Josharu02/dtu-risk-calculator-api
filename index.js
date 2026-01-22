@@ -36,6 +36,7 @@ function getGhlClient(ghlToken) {
 }
 
 async function lookupContactByEmail(client, email) {
+  console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/lookup`);
   const response = await client.get("/contacts/lookup", {
     params: { email },
   });
@@ -45,16 +46,19 @@ async function lookupContactByEmail(client, email) {
 }
 
 async function createContact(client, payload) {
+  console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/`);
   const response = await client.post("/contacts/", payload);
   return response.data;
 }
 
 async function updateContact(client, contactId, payload) {
+  console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/${contactId}`);
   const response = await client.put(`/contacts/${contactId}`, payload);
   return response.data;
 }
 
 async function addTagToContact(client, contactId, tag) {
+  console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/${contactId}/tags`);
   const response = await client.post(`/contacts/${contactId}/tags`, {
     tags: [tag],
   });
@@ -107,6 +111,23 @@ app.post("/email-plan", async (req, res) => {
     }
 
     const client = getGhlClient(ghlToken);
+    const rawHeaders = client.defaults.headers || {};
+    const headerKeys = Object.keys(rawHeaders).filter(
+      (key) => !["common", "get", "post", "put", "patch", "delete", "head"].includes(key)
+    );
+    const authHeader =
+      rawHeaders.Authorization ||
+      (rawHeaders.common && rawHeaders.common.Authorization) ||
+      null;
+    const versionHeader =
+      rawHeaders.Version || (rawHeaders.common && rawHeaders.common.Version) || null;
+    console.log("GHL_BASE_URL", GHL_BASE_URL);
+    console.log("GHL_HEADERS_KEYS", headerKeys);
+    console.log(
+      "GHL_AUTH_FORMAT_OK",
+      typeof authHeader === "string" && /^Bearer\s+\S+$/u.test(authHeader)
+    );
+    console.log("GHL_VERSION_PRESENT", Boolean(versionHeader));
     let existing;
     try {
       existing = await lookupContactByEmail(client, email);
