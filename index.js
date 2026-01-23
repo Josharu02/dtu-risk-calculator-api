@@ -206,14 +206,19 @@ app.post("/email-plan", async (req, res) => {
       }
 
       try {
-      await addTagToContact(client, contactId, "risk_calculator_plan");
+        console.log("TAG_ADD_ATTEMPT", contactId);
+        await addTagToContact(client, contactId, "risk_calculator_plan");
+        console.log("TAG_ADD_SUCCESS", contactId);
       } catch (err) {
-        console.log("GHL_ERROR_STATUS", err?.response?.status);
-        console.log("GHL_ERROR_DATA", err?.response?.data);
-        throw err;
+        console.log("TAG_ADD_FAILED", err?.response?.data);
+        console.log("API_RESPONSE_STATUS", 500, "tag_add_failed");
+        return res.status(500).json({
+          error: "Failed to apply tag",
+          details: err?.response?.data || err?.message,
+        });
       }
 
-      return res.json({ ok: true });
+      return res.status(200).json({ success: true });
     } catch (err) {
       const message =
         err.response && err.response.data ? err.response.data : { error: err.message };
