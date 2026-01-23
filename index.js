@@ -121,6 +121,24 @@ app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/debug-routes", (req, res) => {
+  const hasEmailPlan =
+    Boolean(app && app._router && Array.isArray(app._router.stack)
+      ? app._router.stack.some(
+          (layer) => layer && layer.route && layer.route.path === "/email-plan"
+        )
+      : false);
+  res.json({
+    hasEmailPlan,
+    baseUrl: GHL_BASE_URL,
+    envHasToken: Boolean((process.env.GHL_API_KEY || "").trim()),
+    envHasLocation: Boolean((process.env.GHL_LOCATION_ID || "").trim()),
+    routeHint: "Expected POST /email-plan",
+  });
+});
+
+app.get("/email-plan", (req, res) => res.status(200).send("email-plan OK"));
+
 app.post("/email-plan", async (req, res) => {
   console.log("EMAIL_PLAN_HIT");
   console.log(
