@@ -22,6 +22,8 @@ app.use(
 );
 
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
+let cachedCustomFieldMap = null;
+let customFieldMapPromise = null;
 
 function getGhlClient(ghlToken) {
   return axios.create({
@@ -33,6 +35,42 @@ function getGhlClient(ghlToken) {
     },
     timeout: 15000,
   });
+}
+
+async function getCustomFieldMap(client, locationId) {
+  if (cachedCustomFieldMap) {
+    return cachedCustomFieldMap;
+  }
+  if (customFieldMapPromise) {
+    return customFieldMapPromise;
+  }
+  customFieldMapPromise = (async () => {
+    console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/custom-fields`);
+    const response = await client.get("/custom-fields", {
+      params: { locationId },
+    });
+    const data = response && response.data ? response.data : {};
+    const fields = Array.isArray(data.customFields)
+      ? data.customFields
+      : Array.isArray(data.custom_fields)
+      ? data.custom_fields
+      : [];
+    const fieldMap = {};
+    fields.forEach((field) => {
+      const key = field && (field.fieldKey || field.key);
+      const id = field && (field.id || field._id);
+      if (key && id) {
+        fieldMap[key] = id;
+      }
+    });
+    cachedCustomFieldMap = fieldMap;
+    return fieldMap;
+  })();
+  try {
+    return await customFieldMapPromise;
+  } finally {
+    customFieldMapPromise = null;
+  }
 }
 
 async function lookupContactByEmail(client, email, locationId) {
@@ -151,28 +189,52 @@ app.post("/email-plan", async (req, res) => {
       throw err;
     }
 
-    const customFields = [
-      { key: "profit_target", value: profit_target },
-      { key: "max_loss_limit", value: max_loss_limit },
-      { key: "max_contract_size", value: max_contract_size },
-      { key: "daily_loss_limit", value: daily_loss_limit },
-      { key: "trades_until_lost", value: trades_until_lost },
-      { key: "consistency_enabled", value: consistency_enabled },
-      { key: "consistency_rule", value: consistency_rule },
-      { key: "product", value: product },
-      { key: "stop_loss_ticks", value: stop_loss_ticks },
-      { key: "suggested_contracts", value: suggested_contracts },
-      { key: "risk_per_trade", value: risk_per_trade },
-      { key: "max_sl_hits_per_day", value: max_sl_hits_per_day },
-      { key: "daily_profit_target", value: daily_profit_target },
-      { key: "max_daily_profit", value: max_daily_profit },
+    const fieldMap = await getCustomFieldMap(client, ghlLocationId);
+    const fieldKeys = [
+      "product_traded",
+      "stop_loss_size_ticks",
+      "suggested_contracts",
+      "risk_per_trade",
+      "daily_loss_limit",
+      "max_full_stop_losses_day",
+      "profit_target",
+      "daily_profit_target",
+      "max_daily_profit",
+      "consistency_enabled",
     ];
-    const sanitizedCustomFields = customFields.filter((field) => {
-      if (!field || field.key !== "consistency_enabled") {
-        return true;
+    fieldKeys.forEach((key) => {
+      if (fieldMap[key]) {
+        console.log("CUSTOM_FIELD_MAPPED", key);
+      } else {
+        console.warn("CUSTOM_FIELD_MISSING", key);
       }
-      return field.value === true;
     });
+
+    const fieldValues = {
+      product_traded: product,
+      stop_loss_size_ticks: stop_loss_ticks,
+      suggested_contracts,
+      risk_per_trade,
+      daily_loss_limit,
+      max_full_stop_losses_day: max_sl_hits_per_day,
+      profit_target,
+      daily_profit_target,
+      max_daily_profit,
+    };
+    if (consistency_enabled === true) {
+      fieldValues.consistency_enabled = "true";
+    }
+
+    const sanitizedCustomFields = Object.entries(fieldValues)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => {
+        const id = fieldMap[key];
+        if (!id) {
+          return null;
+        }
+        return { id, value };
+      })
+      .filter(Boolean);
 
     const contactPayload = {
       locationId: ghlLocationId,
