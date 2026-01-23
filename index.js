@@ -79,6 +79,14 @@ async function addTagToContact(client, contactId, tag) {
   return response.data;
 }
 
+async function removeTagFromContact(client, contactId, tag) {
+  console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/${contactId}/tags`);
+  const response = await client.delete(`/contacts/${contactId}/tags`, {
+    data: { tags: [tag] },
+  });
+  return response.data;
+}
+
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
@@ -206,16 +214,21 @@ app.post("/email-plan", async (req, res) => {
       }
 
       try {
+        console.log("TAG_REMOVE_ATTEMPT", contactId);
+        await removeTagFromContact(client, contactId, "risk_calculator_plan");
+        console.log("TAG_REMOVE_SUCCESS", contactId);
+      } catch (err) {
+        console.log("TAG_REMOVE_FAILED", err?.response?.data || err?.message);
+      }
+
+      try {
         console.log("TAG_ADD_ATTEMPT", contactId);
         await addTagToContact(client, contactId, "risk_calculator_plan");
         console.log("TAG_ADD_SUCCESS", contactId);
       } catch (err) {
-        console.log("TAG_ADD_FAILED", err?.response?.data);
+        console.log("TAG_ADD_FAILED", err?.response?.data || err?.message);
         console.log("API_RESPONSE_STATUS", 500, "tag_add_failed");
-        return res.status(500).json({
-          error: "Failed to apply tag",
-          details: err?.response?.data || err?.message,
-        });
+        return res.status(500).json({ error: "Failed to apply tag" });
       }
 
       return res.status(200).json({ success: true });
