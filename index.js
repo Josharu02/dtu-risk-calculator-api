@@ -35,73 +35,6 @@ function getGhlClient(ghlToken) {
   });
 }
 
-async function fetchCustomFields(client, locationId) {
-  const endpoints = [
-    {
-      label: `/locations/${locationId}/customFields`,
-      request: () => client.get(`/locations/${locationId}/customFields`),
-    },
-    {
-      label: `/locations/${locationId}/custom-fields`,
-      request: () => client.get(`/locations/${locationId}/custom-fields`),
-    },
-    {
-      label: `/custom-fields?locationId=${locationId}`,
-      request: () =>
-        client.get("/custom-fields", {
-          params: { locationId },
-        }),
-    },
-    {
-      label: `/customFields?locationId=${locationId}`,
-      request: () =>
-        client.get("/customFields", {
-          params: { locationId },
-        }),
-    },
-  ];
-
-  let lastError = null;
-  for (const endpoint of endpoints) {
-    try {
-      console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}${endpoint.label}`);
-      const response = await endpoint.request();
-      if (response && response.status === 200) {
-        console.log("GHL_CUSTOM_FIELDS_ENDPOINT_OK", endpoint.label);
-        const data = response.data || {};
-        const fields = Array.isArray(data.customFields)
-          ? data.customFields
-          : Array.isArray(data.custom_fields)
-          ? data.custom_fields
-          : Array.isArray(data.fields)
-          ? data.fields
-          : Array.isArray(data.data)
-          ? data.data
-          : Array.isArray(data)
-          ? data
-          : [];
-        const fieldMap = {};
-        fields.forEach((field) => {
-          const key = field && (field.fieldKey || field.key || field.name);
-          const id = field && (field.id || field._id);
-          if (key && id) {
-            fieldMap[key] = id;
-          }
-        });
-        return fieldMap;
-      }
-    } catch (err) {
-      lastError = err;
-      console.warn(
-        "GHL_CUSTOM_FIELDS_ENDPOINT_FAIL",
-        endpoint.label,
-        err?.response?.status
-      );
-    }
-  }
-  throw lastError || new Error("Unable to fetch custom fields");
-}
-
 async function lookupContactByEmail(client, email, locationId) {
   console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/search`);
   const response = await client.post("/contacts/search", {
@@ -240,26 +173,18 @@ app.post("/email-plan", async (req, res) => {
         throw err;
       }
 
-      const fieldMap = await fetchCustomFields(client, ghlLocationId);
-      const fieldKeys = [
-        "product_traded",
-        "stop_loss_size_ticks",
-        "suggested_contracts",
-        "risk_per_trade",
-        "daily_loss_limit",
-        "max_full_stop_losses_day",
-        "profit_target",
-        "daily_profit_target",
-        "max_daily_profit",
-        "consistency_enabled",
-      ];
-      fieldKeys.forEach((key) => {
-        if (fieldMap[key]) {
-          console.log("CUSTOM_FIELD_MAPPED", key);
-        } else {
-          console.warn("CUSTOM_FIELD_MISSING", key);
-        }
-      });
+      const fieldIdMap = {
+        product_traded: (process.env.CF_PRODUCT_TRADED_ID || "").trim(),
+        stop_loss_size_ticks: (process.env.CF_STOP_LOSS_SIZE_TICKS_ID || "").trim(),
+        suggested_contracts: (process.env.CF_SUGGESTED_CONTRACTS_ID || "").trim(),
+        risk_per_trade: (process.env.CF_RISK_PER_TRADE_ID || "").trim(),
+        daily_loss_limit: (process.env.CF_DAILY_LOSS_LIMIT_ID || "").trim(),
+        max_full_stop_losses_day: (process.env.CF_MAX_FULL_STOP_LOSSES_DAY_ID || "").trim(),
+        profit_target: (process.env.CF_PROFIT_TARGET_ID || "").trim(),
+        daily_profit_target: (process.env.CF_DAILY_PROFIT_TARGET_ID || "").trim(),
+        max_daily_profit: (process.env.CF_MAX_DAILY_PROFIT_ID || "").trim(),
+        consistency_enabled: (process.env.CF_CONSISTENCY_ENABLED_ID || "").trim(),
+      };
 
       const fieldValues = {
         product_traded: product,
@@ -278,8 +203,9 @@ app.post("/email-plan", async (req, res) => {
       const sanitizedCustomFields = Object.entries(fieldValues)
         .filter(([, value]) => value !== undefined && value !== null)
         .map(([key, value]) => {
-          const id = fieldMap[key];
+          const id = fieldIdMap[key];
           if (!id) {
+            console.warn("CUSTOM_FIELD_ID_MISSING", key);
             return null;
           }
           return { id, value };
