@@ -173,50 +173,10 @@ app.post("/email-plan", async (req, res) => {
         throw err;
       }
 
-      const fieldIdMap = {
-        product_traded: (process.env.CF_PRODUCT_TRADED_ID || "").trim(),
-        stop_loss_size_ticks: (process.env.CF_STOP_LOSS_SIZE_TICKS_ID || "").trim(),
-        suggested_contracts: (process.env.CF_SUGGESTED_CONTRACTS_ID || "").trim(),
-        risk_per_trade: (process.env.CF_RISK_PER_TRADE_ID || "").trim(),
-        daily_loss_limit: (process.env.CF_DAILY_LOSS_LIMIT_ID || "").trim(),
-        max_full_stop_losses_day: (process.env.CF_MAX_FULL_STOP_LOSSES_DAY_ID || "").trim(),
-        profit_target: (process.env.CF_PROFIT_TARGET_ID || "").trim(),
-        daily_profit_target: (process.env.CF_DAILY_PROFIT_TARGET_ID || "").trim(),
-        max_daily_profit: (process.env.CF_MAX_DAILY_PROFIT_ID || "").trim(),
-        consistency_enabled: (process.env.CF_CONSISTENCY_ENABLED_ID || "").trim(),
-      };
-
-      const fieldValues = {
-        product_traded: product,
-        stop_loss_size_ticks: stop_loss_ticks,
-        suggested_contracts,
-        risk_per_trade,
-        daily_loss_limit,
-        max_full_stop_losses_day: max_sl_hits_per_day,
-        profit_target,
-        daily_profit_target,
-        max_daily_profit,
-      };
-      if (consistency_enabled === true) {
-        fieldValues.consistency_enabled = "true";
-      }
-      const sanitizedCustomFields = Object.entries(fieldValues)
-        .filter(([, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => {
-          const id = fieldIdMap[key];
-          if (!id) {
-            console.warn("CUSTOM_FIELD_ID_MISSING", key);
-            return null;
-          }
-          return { id, value };
-        })
-        .filter(Boolean);
-
       const contactPayload = {
         locationId: ghlLocationId,
         name: full_name,
         email,
-        customFields: sanitizedCustomFields,
       };
 
       let contactId;
