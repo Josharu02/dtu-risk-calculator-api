@@ -35,6 +35,73 @@ function getGhlClient(ghlToken) {
   });
 }
 
+async function fetchCustomFields(client, locationId) {
+  const endpoints = [
+    {
+      label: `/locations/${locationId}/customFields`,
+      request: () => client.get(`/locations/${locationId}/customFields`),
+    },
+    {
+      label: `/locations/${locationId}/custom-fields`,
+      request: () => client.get(`/locations/${locationId}/custom-fields`),
+    },
+    {
+      label: `/custom-fields?locationId=${locationId}`,
+      request: () =>
+        client.get("/custom-fields", {
+          params: { locationId },
+        }),
+    },
+    {
+      label: `/customFields?locationId=${locationId}`,
+      request: () =>
+        client.get("/customFields", {
+          params: { locationId },
+        }),
+    },
+  ];
+
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}${endpoint.label}`);
+      const response = await endpoint.request();
+      if (response && response.status === 200) {
+        console.log("GHL_CUSTOM_FIELDS_ENDPOINT_OK", endpoint.label);
+        const data = response.data || {};
+        const fields = Array.isArray(data.customFields)
+          ? data.customFields
+          : Array.isArray(data.custom_fields)
+          ? data.custom_fields
+          : Array.isArray(data.fields)
+          ? data.fields
+          : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data)
+          ? data
+          : [];
+        const fieldMap = {};
+        fields.forEach((field) => {
+          const key = field && (field.fieldKey || field.key || field.name);
+          const id = field && (field.id || field._id);
+          if (key && id) {
+            fieldMap[key] = id;
+          }
+        });
+        return fieldMap;
+      }
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        "GHL_CUSTOM_FIELDS_ENDPOINT_FAIL",
+        endpoint.label,
+        err?.response?.status
+      );
+    }
+  }
+  throw lastError || new Error("Unable to fetch custom fields");
+}
+
 async function lookupContactByEmail(client, email, locationId) {
   console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/contacts/search`);
   const response = await client.post("/contacts/search", {
@@ -173,6 +240,27 @@ app.post("/email-plan", async (req, res) => {
         throw err;
       }
 
+      const fieldMap = await fetchCustomFields(client, ghlLocationId);
+      const fieldKeys = [
+        "product_traded",
+        "stop_loss_size_ticks",
+        "suggested_contracts",
+        "risk_per_trade",
+        "daily_loss_limit",
+        "max_full_stop_losses_day",
+        "profit_target",
+        "daily_profit_target",
+        "max_daily_profit",
+        "consistency_enabled",
+      ];
+      fieldKeys.forEach((key) => {
+        if (fieldMap[key]) {
+          console.log("CUSTOM_FIELD_MAPPED", key);
+        } else {
+          console.warn("CUSTOM_FIELD_MISSING", key);
+        }
+      });
+
       const fieldValues = {
         product_traded: product,
         stop_loss_size_ticks: stop_loss_ticks,
@@ -187,18 +275,22 @@ app.post("/email-plan", async (req, res) => {
       if (consistency_enabled === true) {
         fieldValues.consistency_enabled = "true";
       }
-      const sanitizedCustomFields = Object.entries(fieldValues).reduce((acc, [key, value]) => {
-        if (value !== undefined && value !== null) {
-          acc[key] = value;
-        }
-        return acc;
-      }, {});
+      const sanitizedCustomFields = Object.entries(fieldValues)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([key, value]) => {
+          const id = fieldMap[key];
+          if (!id) {
+            return null;
+          }
+          return { id, value };
+        })
+        .filter(Boolean);
 
       const contactPayload = {
         locationId: ghlLocationId,
         name: full_name,
         email,
-        ...sanitizedCustomFields,
+        customFields: sanitizedCustomFields,
       };
 
       let contactId;
