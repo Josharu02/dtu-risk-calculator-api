@@ -22,8 +22,6 @@ app.use(
 );
 
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
-let cachedCustomFieldMap = null;
-let customFieldMapPromise = null;
 
 function getGhlClient(ghlToken) {
   return axios.create({
@@ -35,42 +33,6 @@ function getGhlClient(ghlToken) {
     },
     timeout: 15000,
   });
-}
-
-async function getCustomFieldMap(client, locationId) {
-  if (cachedCustomFieldMap) {
-    return cachedCustomFieldMap;
-  }
-  if (customFieldMapPromise) {
-    return customFieldMapPromise;
-  }
-  customFieldMapPromise = (async () => {
-    console.log("GHL_REQUEST_URL", `${GHL_BASE_URL}/custom-fields`);
-    const response = await client.get("/custom-fields", {
-      params: { locationId },
-    });
-    const data = response && response.data ? response.data : {};
-    const fields = Array.isArray(data.customFields)
-      ? data.customFields
-      : Array.isArray(data.custom_fields)
-      ? data.custom_fields
-      : [];
-    const fieldMap = {};
-    fields.forEach((field) => {
-      const key = field && (field.fieldKey || field.key);
-      const id = field && (field.id || field._id);
-      if (key && id) {
-        fieldMap[key] = id;
-      }
-    });
-    cachedCustomFieldMap = fieldMap;
-    return fieldMap;
-  })();
-  try {
-    return await customFieldMapPromise;
-  } finally {
-    customFieldMapPromise = null;
-  }
 }
 
 async function lookupContactByEmail(client, email, locationId) {
@@ -211,27 +173,6 @@ app.post("/email-plan", async (req, res) => {
         throw err;
       }
 
-      const fieldMap = await getCustomFieldMap(client, ghlLocationId);
-      const fieldKeys = [
-        "product_traded",
-        "stop_loss_size_ticks",
-        "suggested_contracts",
-        "risk_per_trade",
-        "daily_loss_limit",
-        "max_full_stop_losses_day",
-        "profit_target",
-        "daily_profit_target",
-        "max_daily_profit",
-        "consistency_enabled",
-      ];
-      fieldKeys.forEach((key) => {
-        if (fieldMap[key]) {
-          console.log("CUSTOM_FIELD_MAPPED", key);
-        } else {
-          console.warn("CUSTOM_FIELD_MISSING", key);
-        }
-      });
-
       const fieldValues = {
         product_traded: product,
         stop_loss_size_ticks: stop_loss_ticks,
@@ -246,23 +187,18 @@ app.post("/email-plan", async (req, res) => {
       if (consistency_enabled === true) {
         fieldValues.consistency_enabled = "true";
       }
-
-      const sanitizedCustomFields = Object.entries(fieldValues)
-        .filter(([, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => {
-          const id = fieldMap[key];
-          if (!id) {
-            return null;
-          }
-          return { id, value };
-        })
-        .filter(Boolean);
+      const sanitizedCustomFields = Object.entries(fieldValues).reduce((acc, [key, value]) => {
+        if (value !== undefined && value !== null) {
+          acc[key] = value;
+        }
+        return acc;
+      }, {});
 
       const contactPayload = {
         locationId: ghlLocationId,
         name: full_name,
         email,
-        customFields: sanitizedCustomFields,
+        ...sanitizedCustomFields,
       };
 
       let contactId;
@@ -301,14 +237,13 @@ app.post("/email-plan", async (req, res) => {
 
       return res.json({ ok: true });
     } catch (err) {
-      const status = err.response && err.response.status ? err.response.status : 500;
       const message =
         err.response && err.response.data ? err.response.data : { error: err.message };
-      if (status === 401) {
+      if (err.response && err.response.status === 401) {
         console.log("SERVER_401_REASON", "ghl_response");
       }
-      console.log("API_RESPONSE_STATUS", status, "ghl_error");
-      return res.status(status).json({ ok: false, error: message });
+      console.log("API_RESPONSE_STATUS", 500, "ghl_error");
+      return res.status(500).json({ ok: false, error: message });
     }
   } catch (err) {
     console.log("API_UNHANDLED_ERROR", err?.message);
