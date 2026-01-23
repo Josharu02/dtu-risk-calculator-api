@@ -151,158 +151,171 @@ app.post("/email-plan", async (req, res) => {
   console.log("GHL_KEY_PREFIX", ghlToken.slice(0, 4));
   console.log("GHL_KEY_LENGTH", ghlToken.length);
   if (!ghlToken) {
+    console.log("API_RESPONSE_STATUS", 500, "missing_token");
     return res.status(500).json({ ok: false, error: "GHL_API_KEY is not set." });
   }
   if (!ghlLocationId) {
+    console.log("API_RESPONSE_STATUS", 500, "missing_location");
     return res.status(500).json({ ok: false, error: "Missing GHL_LOCATION_ID" });
   }
   try {
-    const {
-      full_name,
-      email,
-      profit_target,
-      max_loss_limit,
-      max_contract_size,
-      daily_loss_limit,
-      trades_until_lost,
-      consistency_enabled,
-      consistency_rule,
-      product,
-      stop_loss_ticks,
-      suggested_contracts,
-      risk_per_trade,
-      max_sl_hits_per_day,
-      daily_profit_target,
-      max_daily_profit,
-    } = req.body || {};
-
-    if (!full_name || !email) {
-      return res.status(400).json({ ok: false, error: "full_name and email are required." });
-    }
-
-    const client = getGhlClient(ghlToken);
-    const rawHeaders = client.defaults.headers || {};
-    const headerKeys = Object.keys(rawHeaders).filter(
-      (key) => !["common", "get", "post", "put", "patch", "delete", "head"].includes(key)
-    );
-    const authHeader =
-      rawHeaders.Authorization ||
-      (rawHeaders.common && rawHeaders.common.Authorization) ||
-      null;
-    const versionHeader =
-      rawHeaders.Version || (rawHeaders.common && rawHeaders.common.Version) || null;
-    console.log("GHL_BASE_URL", GHL_BASE_URL);
-    console.log("GHL_HEADERS_KEYS", headerKeys);
-    console.log(
-      "GHL_AUTH_FORMAT_OK",
-      typeof authHeader === "string" && /^Bearer\s+\S+$/u.test(authHeader)
-    );
-    console.log("GHL_VERSION_PRESENT", Boolean(versionHeader));
-    let existing;
     try {
-      existing = await lookupContactByEmail(client, email, ghlLocationId);
-    } catch (err) {
-      console.log("GHL_ERROR_STATUS", err?.response?.status);
-      console.log("GHL_ERROR_DATA", err?.response?.data);
-      throw err;
-    }
+      const {
+        full_name,
+        email,
+        profit_target,
+        max_loss_limit,
+        max_contract_size,
+        daily_loss_limit,
+        trades_until_lost,
+        consistency_enabled,
+        consistency_rule,
+        product,
+        stop_loss_ticks,
+        suggested_contracts,
+        risk_per_trade,
+        max_sl_hits_per_day,
+        daily_profit_target,
+        max_daily_profit,
+      } = req.body || {};
 
-    const fieldMap = await getCustomFieldMap(client, ghlLocationId);
-    const fieldKeys = [
-      "product_traded",
-      "stop_loss_size_ticks",
-      "suggested_contracts",
-      "risk_per_trade",
-      "daily_loss_limit",
-      "max_full_stop_losses_day",
-      "profit_target",
-      "daily_profit_target",
-      "max_daily_profit",
-      "consistency_enabled",
-    ];
-    fieldKeys.forEach((key) => {
-      if (fieldMap[key]) {
-        console.log("CUSTOM_FIELD_MAPPED", key);
-      } else {
-        console.warn("CUSTOM_FIELD_MISSING", key);
+      if (!full_name || !email) {
+        console.log("API_RESPONSE_STATUS", 400, "missing_identity");
+        return res.status(400).json({ ok: false, error: "full_name and email are required." });
       }
-    });
 
-    const fieldValues = {
-      product_traded: product,
-      stop_loss_size_ticks: stop_loss_ticks,
-      suggested_contracts,
-      risk_per_trade,
-      daily_loss_limit,
-      max_full_stop_losses_day: max_sl_hits_per_day,
-      profit_target,
-      daily_profit_target,
-      max_daily_profit,
-    };
-    if (consistency_enabled === true) {
-      fieldValues.consistency_enabled = "true";
-    }
+      const client = getGhlClient(ghlToken);
+      const rawHeaders = client.defaults.headers || {};
+      const headerKeys = Object.keys(rawHeaders).filter(
+        (key) => !["common", "get", "post", "put", "patch", "delete", "head"].includes(key)
+      );
+      const authHeader =
+        rawHeaders.Authorization ||
+        (rawHeaders.common && rawHeaders.common.Authorization) ||
+        null;
+      const versionHeader =
+        rawHeaders.Version || (rawHeaders.common && rawHeaders.common.Version) || null;
+      console.log("GHL_BASE_URL", GHL_BASE_URL);
+      console.log("GHL_HEADERS_KEYS", headerKeys);
+      console.log(
+        "GHL_AUTH_FORMAT_OK",
+        typeof authHeader === "string" && /^Bearer\s+\S+$/u.test(authHeader)
+      );
+      console.log("GHL_VERSION_PRESENT", Boolean(versionHeader));
+      let existing;
+      try {
+        existing = await lookupContactByEmail(client, email, ghlLocationId);
+      } catch (err) {
+        console.log("GHL_ERROR_STATUS", err?.response?.status);
+        console.log("GHL_ERROR_DATA", err?.response?.data);
+        throw err;
+      }
 
-    const sanitizedCustomFields = Object.entries(fieldValues)
-      .filter(([, value]) => value !== undefined && value !== null)
-      .map(([key, value]) => {
-        const id = fieldMap[key];
-        if (!id) {
-          return null;
+      const fieldMap = await getCustomFieldMap(client, ghlLocationId);
+      const fieldKeys = [
+        "product_traded",
+        "stop_loss_size_ticks",
+        "suggested_contracts",
+        "risk_per_trade",
+        "daily_loss_limit",
+        "max_full_stop_losses_day",
+        "profit_target",
+        "daily_profit_target",
+        "max_daily_profit",
+        "consistency_enabled",
+      ];
+      fieldKeys.forEach((key) => {
+        if (fieldMap[key]) {
+          console.log("CUSTOM_FIELD_MAPPED", key);
+        } else {
+          console.warn("CUSTOM_FIELD_MISSING", key);
         }
-        return { id, value };
-      })
-      .filter(Boolean);
+      });
 
-    const contactPayload = {
-      locationId: ghlLocationId,
-      name: full_name,
-      email,
-      customFields: sanitizedCustomFields,
-    };
+      const fieldValues = {
+        product_traded: product,
+        stop_loss_size_ticks: stop_loss_ticks,
+        suggested_contracts,
+        risk_per_trade,
+        daily_loss_limit,
+        max_full_stop_losses_day: max_sl_hits_per_day,
+        profit_target,
+        daily_profit_target,
+        max_daily_profit,
+      };
+      if (consistency_enabled === true) {
+        fieldValues.consistency_enabled = "true";
+      }
 
-    let contactId;
-    if (existing && existing.id) {
+      const sanitizedCustomFields = Object.entries(fieldValues)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([key, value]) => {
+          const id = fieldMap[key];
+          if (!id) {
+            return null;
+          }
+          return { id, value };
+        })
+        .filter(Boolean);
+
+      const contactPayload = {
+        locationId: ghlLocationId,
+        name: full_name,
+        email,
+        customFields: sanitizedCustomFields,
+      };
+
+      let contactId;
+      if (existing && existing.id) {
+        try {
+          const updated = await updateContact(client, existing.id, contactPayload);
+          contactId = updated && updated.contact ? updated.contact.id : existing.id;
+        } catch (err) {
+          console.log("GHL_ERROR_STATUS", err?.response?.status);
+          console.log("GHL_ERROR_DATA", err?.response?.data);
+          throw err;
+        }
+      } else {
+        try {
+          const created = await createContact(client, contactPayload);
+          contactId = created && created.contact ? created.contact.id : null;
+        } catch (err) {
+          console.log("GHL_ERROR_STATUS", err?.response?.status);
+          console.log("GHL_ERROR_DATA", err?.response?.data);
+          throw err;
+        }
+      }
+
+      if (!contactId) {
+        console.log("API_RESPONSE_STATUS", 502, "missing_contact");
+        return res.status(502).json({ ok: false, error: "Unable to resolve contact ID." });
+      }
+
       try {
-        const updated = await updateContact(client, existing.id, contactPayload);
-        contactId = updated && updated.contact ? updated.contact.id : existing.id;
+      await addTagToContact(client, contactId, "risk_calculator_plan");
       } catch (err) {
         console.log("GHL_ERROR_STATUS", err?.response?.status);
         console.log("GHL_ERROR_DATA", err?.response?.data);
         throw err;
       }
-    } else {
-      try {
-        const created = await createContact(client, contactPayload);
-        contactId = created && created.contact ? created.contact.id : null;
-      } catch (err) {
-        console.log("GHL_ERROR_STATUS", err?.response?.status);
-        console.log("GHL_ERROR_DATA", err?.response?.data);
-        throw err;
-      }
-    }
 
-    if (!contactId) {
-      return res.status(502).json({ ok: false, error: "Unable to resolve contact ID." });
-    }
-
-    try {
-    await addTagToContact(client, contactId, "risk_calculator_plan");
+      return res.json({ ok: true });
     } catch (err) {
-      console.log("GHL_ERROR_STATUS", err?.response?.status);
-      console.log("GHL_ERROR_DATA", err?.response?.data);
-      throw err;
+      const status = err.response && err.response.status ? err.response.status : 500;
+      const message =
+        err.response && err.response.data ? err.response.data : { error: err.message };
+      if (status === 401) {
+        console.log("SERVER_401_REASON", "ghl_response");
+      }
+      console.log("API_RESPONSE_STATUS", status, "ghl_error");
+      return res.status(status).json({ ok: false, error: message });
     }
-
-    return res.json({ ok: true });
   } catch (err) {
-    const status = err.response && err.response.status ? err.response.status : 500;
-    const message =
-      err.response && err.response.data ? err.response.data : { error: err.message };
-    if (status === 401) {
-      console.log("SERVER_401_REASON", "ghl_response");
-    }
-    return res.status(status).json({ ok: false, error: message });
+    console.log("API_UNHANDLED_ERROR", err?.message);
+    console.log("API_UNHANDLED_ERROR_STATUS", err?.response?.status);
+    console.log("API_UNHANDLED_ERROR_DATA", err?.response?.data);
+    console.log("API_RESPONSE_STATUS", 500, "unhandled_error");
+    return res.status(500).json({ error: "email-plan failed", details: err?.message });
   }
 });
 
