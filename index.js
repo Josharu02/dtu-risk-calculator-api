@@ -288,6 +288,8 @@ app.post("/email-plan", async (req, res) => {
   }
 });
 
+console.log("EMAIL PLAN ROUTE ACTIVE");
+
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
 });
