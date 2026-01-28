@@ -286,17 +286,43 @@ app.post("/email-plan", async (req, res) => {
         consistency_enabled: req.body?.consistency_enabled ?? false,
         max_daily_profit: req.body?.max_daily_profit ?? 0,
       };
+      const updateBody = { customField: fieldsPayload };
+      const updateBodyKeys = Object.keys(updateBody || {});
+      const attemptUpdateFields = async (path, method) => {
+        const fullUrl = `${GHL_BASE_URL}${path}`;
+        console.log("GHL_UPDATE_FIELDS_URL", fullUrl);
+        console.log("GHL_UPDATE_FIELDS_METHOD", method);
+        console.log("GHL_UPDATE_FIELDS_REQUEST_BODY_KEYS", updateBodyKeys);
+        return client.request({
+          url: path,
+          method,
+          data: updateBody,
+        });
+      };
       console.log("GHL_UPDATE_FIELDS_START", contactId, Object.keys(fieldsPayload));
       try {
-        const fieldsResponse = await client.patch(`/contacts/${contactId}`, {
-          customField: fieldsPayload,
-        });
+        let fieldsResponse;
+        let attemptUsed = "primary";
+        try {
+          fieldsResponse = await attemptUpdateFields(`/contacts/${contactId}`, "PUT");
+        } catch (err) {
+          if (err?.response?.status === 404) {
+            attemptUsed = "fallback_with_location";
+            fieldsResponse = await attemptUpdateFields(
+              `/locations/${ghlLocationId}/contacts/${contactId}`,
+              "PUT"
+            );
+          } else {
+            throw err;
+          }
+        }
         console.log("GHL_UPDATE_FIELDS_RESPONSE_STATUS", fieldsResponse?.status);
         console.log(
           "GHL_UPDATE_FIELDS_RESPONSE_BODY",
           truncateLogValue(fieldsResponse?.data)
         );
         console.log("GHL_UPDATE_FIELDS_END", "success");
+        console.log("GHL_UPDATE_FIELDS_ATTEMPT_SUCCESS", attemptUsed);
       } catch (err) {
         const status = err?.response?.status || 500;
         const body = err?.response?.data || err?.message;
