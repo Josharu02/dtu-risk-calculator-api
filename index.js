@@ -168,6 +168,18 @@ app.post("/email-plan", async (req, res) => {
         max_daily_profit,
       } = req.body || {};
 
+      console.log("EMAIL_BODY_KEYS", Object.keys(req.body || {}));
+      console.log("EMAIL_BODY_PREVIEW", {
+        email: req.body?.email,
+        product: req.body?.product,
+        stop_loss_ticks: req.body?.stop_loss_ticks,
+        suggested_contracts: req.body?.suggested_contracts,
+        risk_per_trade: req.body?.risk_per_trade,
+        daily_loss_limit: req.body?.daily_loss_limit,
+        daily_profit_target: req.body?.daily_profit_target,
+        profit_target: req.body?.profit_target,
+      });
+
       console.log("EMAIL_ROUTE_START", email, ghlLocationId);
 
       if (!full_name || !email) {
