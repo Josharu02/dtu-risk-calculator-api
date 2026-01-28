@@ -227,24 +227,30 @@ app.post("/email-plan", async (req, res) => {
         locationId: ghlLocationId,
         name: full_name,
         email,
-        customField: {
-          product: req.body?.product,
-          stop_loss_ticks: req.body?.stop_loss_ticks,
-          suggested_contracts: req.body?.suggested_contracts,
-          risk_per_trade: req.body?.risk_per_trade,
-          daily_loss_limit: req.body?.daily_loss_limit,
-          max_sl_hits_per_day: req.body?.max_sl_hits_per_day ?? 0,
-          profit_target: req.body?.profit_target,
-          daily_profit_target: req.body?.daily_profit_target,
-          consistency_enabled: req.body?.consistency_enabled ?? false,
-          max_daily_profit: req.body?.max_daily_profit ?? 0,
-        },
+        customFields: [
+          { key: "product", value: String(req.body?.product) },
+          { key: "stop_loss_ticks", value: String(req.body?.stop_loss_ticks) },
+          { key: "suggested_contracts", value: String(req.body?.suggested_contracts) },
+          { key: "risk_per_trade", value: String(req.body?.risk_per_trade) },
+          { key: "daily_loss_limit", value: String(req.body?.daily_loss_limit) },
+          { key: "max_sl_hits_per_day", value: String(req.body?.max_sl_hits_per_day) },
+          { key: "profit_target", value: String(req.body?.profit_target) },
+          { key: "daily_profit_target", value: String(req.body?.daily_profit_target) },
+          { key: "consistency_enabled", value: String(req.body?.consistency_enabled) },
+          { key: "max_daily_profit", value: String(req.body?.max_daily_profit) },
+        ],
       };
 
       let contactId;
       if (existing && existing.id) {
         try {
           console.log("GHL_UPSERT_UPDATE_BODY_KEYS", Object.keys(contactPayload));
+          console.log(
+            "GHL_CUSTOMFIELDS_KEYS",
+            Array.isArray(contactPayload.customFields)
+              ? contactPayload.customFields.map((entry) => entry.key)
+              : []
+          );
           const updated = await updateContact(client, existing.id, contactPayload);
           contactId = updated && updated.contact ? updated.contact.id : existing.id;
         } catch (err) {
