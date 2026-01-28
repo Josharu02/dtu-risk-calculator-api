@@ -118,6 +118,12 @@ app.post("/email-plan", async (req, res) => {
   );
   const ghlToken = (process.env.GHL_API_KEY || "").trim();
   const ghlLocationId = (process.env.GHL_LOCATION_ID || "").trim();
+  const truncateLogValue = (value, maxLength = 2000) => {
+    if (value == null) return value;
+    const raw = typeof value === "string" ? value : JSON.stringify(value);
+    if (raw.length <= maxLength) return raw;
+    return `${raw.slice(0, maxLength)}...<truncated ${raw.length - maxLength} chars>`;
+  };
   const normalizeErrorMessage = (err) => {
     if (!err) return "Unknown error";
     if (typeof err === "string") return err;
@@ -268,6 +274,43 @@ app.post("/email-plan", async (req, res) => {
         });
       }
 
+      const fieldsPayload = {
+        product: req.body?.product,
+        stop_loss_ticks: req.body?.stop_loss_ticks,
+        suggested_contracts: req.body?.suggested_contracts,
+        risk_per_trade: req.body?.risk_per_trade,
+        daily_loss_limit: req.body?.daily_loss_limit,
+        max_sl_hits_per_day: req.body?.max_sl_hits_per_day ?? 0,
+        profit_target: req.body?.profit_target,
+        daily_profit_target: req.body?.daily_profit_target,
+        consistency_enabled: req.body?.consistency_enabled ?? false,
+        max_daily_profit: req.body?.max_daily_profit ?? 0,
+      };
+      console.log("GHL_UPDATE_FIELDS_START", contactId, Object.keys(fieldsPayload));
+      try {
+        const fieldsResponse = await client.patch(`/contacts/${contactId}`, {
+          customField: fieldsPayload,
+        });
+        console.log("GHL_UPDATE_FIELDS_RESPONSE_STATUS", fieldsResponse?.status);
+        console.log(
+          "GHL_UPDATE_FIELDS_RESPONSE_BODY",
+          truncateLogValue(fieldsResponse?.data)
+        );
+        console.log("GHL_UPDATE_FIELDS_END", "success");
+      } catch (err) {
+        const status = err?.response?.status || 500;
+        const body = err?.response?.data || err?.message;
+        console.log("GHL_UPDATE_FIELDS_RESPONSE_STATUS", status);
+        console.log("GHL_UPDATE_FIELDS_RESPONSE_BODY", truncateLogValue(body));
+        console.log("GHL_UPDATE_FIELDS_END", "fail");
+        return res.status(500).json({
+          ok: false,
+          step: "update_fields",
+          status,
+          body,
+        });
+      }
+
       const tagName = "risk_calculator_plan";
       let tagRemoved = false;
       let tagAdded = false;
@@ -301,7 +344,7 @@ app.post("/email-plan", async (req, res) => {
       console.log("EMAIL_ROUTE_DONE");
       return res
         .status(200)
-        .json({ ok: true, contactId, tagRemoved, tagAdded });
+        .json({ ok: true, contactId, fieldsUpdated: true, tagRemoved, tagAdded });
     } catch (err) {
       if (err.response && err.response.status === 401) {
         console.log("SERVER_401_REASON", "ghl_response");
