@@ -118,15 +118,34 @@ app.post("/email-plan", async (req, res) => {
   );
   const ghlToken = (process.env.GHL_API_KEY || "").trim();
   const ghlLocationId = (process.env.GHL_LOCATION_ID || "").trim();
+  const normalizeErrorMessage = (err) => {
+    if (!err) return "Unknown error";
+    if (typeof err === "string") return err;
+    if (err.response && err.response.data) {
+      return typeof err.response.data === "string"
+        ? err.response.data
+        : JSON.stringify(err.response.data);
+    }
+    if (err.message) return String(err.message);
+    return JSON.stringify(err);
+  };
   console.log("GHL_KEY_PREFIX", ghlToken.slice(0, 4));
   console.log("GHL_KEY_LENGTH", ghlToken.length);
   if (!ghlToken) {
     console.log("API_RESPONSE_STATUS", 500, "missing_token");
-    return res.status(500).json({ ok: false, error: "GHL_API_KEY is not set." });
+    return res.status(500).json({
+      ok: false,
+      step: "missing_token",
+      error: "GHL_API_KEY is not set.",
+    });
   }
   if (!ghlLocationId) {
     console.log("API_RESPONSE_STATUS", 500, "missing_location");
-    return res.status(500).json({ ok: false, error: "Missing GHL_LOCATION_ID" });
+    return res.status(500).json({
+      ok: false,
+      step: "missing_location",
+      error: "Missing GHL_LOCATION_ID",
+    });
   }
   try {
     try {
@@ -149,9 +168,15 @@ app.post("/email-plan", async (req, res) => {
         max_daily_profit,
       } = req.body || {};
 
+      console.log("EMAIL_ROUTE_START", email, ghlLocationId);
+
       if (!full_name || !email) {
-        console.log("API_RESPONSE_STATUS", 400, "missing_identity");
-        return res.status(400).json({ ok: false, error: "full_name and email are required." });
+        console.log("API_RESPONSE_STATUS", 500, "missing_identity");
+        return res.status(500).json({
+          ok: false,
+          step: "missing_identity",
+          error: "full_name and email are required.",
+        });
       }
 
       const client = getGhlClient(ghlToken);
@@ -172,13 +197,18 @@ app.post("/email-plan", async (req, res) => {
         typeof authHeader === "string" && /^Bearer\s+\S+$/u.test(authHeader)
       );
       console.log("GHL_VERSION_PRESENT", Boolean(versionHeader));
+      console.log("GHL_UPSERT_CONTACT_START", email);
       let existing;
       try {
         existing = await lookupContactByEmail(client, email, ghlLocationId);
       } catch (err) {
         console.log("GHL_ERROR_STATUS", err?.response?.status);
         console.log("GHL_ERROR_DATA", err?.response?.data);
-        throw err;
+        return res.status(500).json({
+          ok: false,
+          step: "ghl_lookup_contact",
+          error: normalizeErrorMessage(err),
+        });
       }
 
       const contactPayload = {
@@ -195,7 +225,11 @@ app.post("/email-plan", async (req, res) => {
         } catch (err) {
           console.log("GHL_ERROR_STATUS", err?.response?.status);
           console.log("GHL_ERROR_DATA", err?.response?.data);
-          throw err;
+          return res.status(500).json({
+            ok: false,
+            step: "ghl_update_contact",
+            error: normalizeErrorMessage(err),
+          });
         }
       } else {
         try {
@@ -204,49 +238,79 @@ app.post("/email-plan", async (req, res) => {
         } catch (err) {
           console.log("GHL_ERROR_STATUS", err?.response?.status);
           console.log("GHL_ERROR_DATA", err?.response?.data);
-          throw err;
+          return res.status(500).json({
+            ok: false,
+            step: "ghl_create_contact",
+            error: normalizeErrorMessage(err),
+          });
         }
       }
+      console.log("GHL_UPSERT_CONTACT_END", contactId);
 
       if (!contactId) {
         console.log("API_RESPONSE_STATUS", 502, "missing_contact");
-        return res.status(502).json({ ok: false, error: "Unable to resolve contact ID." });
+        return res.status(500).json({
+          ok: false,
+          step: "missing_contact",
+          error: "Unable to resolve contact ID.",
+        });
       }
 
+      const tagName = "risk_calculator_plan";
+      let tagRemoved = false;
+      let tagAdded = false;
+
       try {
-        console.log("TAG_REMOVE_ATTEMPT", contactId);
-        await removeTagFromContact(client, contactId, "risk_calculator_plan");
-        console.log("TAG_REMOVE_SUCCESS", contactId);
+        console.log("GHL_REMOVE_TAG_START", tagName);
+        await removeTagFromContact(client, contactId, tagName);
+        tagRemoved = true;
+        console.log("GHL_REMOVE_TAG_END", tagName, "success");
       } catch (err) {
+        console.log("GHL_REMOVE_TAG_END", tagName, "fail");
         console.log("TAG_REMOVE_FAILED", err?.response?.data || err?.message);
       }
 
       try {
-        console.log("TAG_ADD_ATTEMPT", contactId);
-        await addTagToContact(client, contactId, "risk_calculator_plan");
-        console.log("TAG_ADD_SUCCESS", contactId);
+        console.log("GHL_ADD_TAG_START", tagName);
+        await addTagToContact(client, contactId, tagName);
+        tagAdded = true;
+        console.log("GHL_ADD_TAG_END", tagName, "success");
       } catch (err) {
+        console.log("GHL_ADD_TAG_END", tagName, "fail");
         console.log("TAG_ADD_FAILED", err?.response?.data || err?.message);
         console.log("API_RESPONSE_STATUS", 500, "tag_add_failed");
-        return res.status(500).json({ error: "Failed to apply tag" });
+        return res.status(500).json({
+          ok: false,
+          step: "ghl_add_tag",
+          error: normalizeErrorMessage(err),
+        });
       }
 
-      return res.status(200).json({ success: true });
+      console.log("EMAIL_ROUTE_DONE");
+      return res
+        .status(200)
+        .json({ ok: true, contactId, tagRemoved, tagAdded });
     } catch (err) {
-      const message =
-        err.response && err.response.data ? err.response.data : { error: err.message };
       if (err.response && err.response.status === 401) {
         console.log("SERVER_401_REASON", "ghl_response");
       }
       console.log("API_RESPONSE_STATUS", 500, "ghl_error");
-      return res.status(500).json({ ok: false, error: message });
+      return res.status(500).json({
+        ok: false,
+        step: "ghl_error",
+        error: normalizeErrorMessage(err),
+      });
     }
   } catch (err) {
     console.log("API_UNHANDLED_ERROR", err?.message);
     console.log("API_UNHANDLED_ERROR_STATUS", err?.response?.status);
     console.log("API_UNHANDLED_ERROR_DATA", err?.response?.data);
     console.log("API_RESPONSE_STATUS", 500, "unhandled_error");
-    return res.status(500).json({ error: "email-plan failed", details: err?.message });
+    return res.status(500).json({
+      ok: false,
+      step: "unhandled_error",
+      error: normalizeErrorMessage(err),
+    });
   }
 });
 
